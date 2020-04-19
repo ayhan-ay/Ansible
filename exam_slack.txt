@@ -1,0 +1,906 @@
+Ansible Sample Exam for EX407/EX294
+Posted on 07/05/2019 by Tomas
+This is a sample Ansible exam that I’ve created to prepare for EX407. I have not taken the EX407 exam yet.
+
+You can also use it for the new RHCE 8 exam EX294.
+
+As with the real exam, no answers to the sample exam questions will be provided.
+
+Requirements
+There are 18 questions in total.
+
+You will need five RHEL 7 (or CentOS 7) virtual machines to be able to successfully complete all questions.
+
+One VM will be configured as an Ansible control node. Other four VMs will be used to apply playbooks to solve the sample exam questions. The following FQDNs will be used throughout the sample exam.
+
+ansible-control.hl.local – Ansible control node
+ansible2.hl.local – managed host
+ansible3.hl.local – managed host
+ansible4.hl.local – managed host
+ansible5.hl.local – managed host
+There are a couple of requiremens that should be met before proceeding further:
+
+ansible-control.hl.local server has passwordless SSH access to all managed servers (using the root user).
+ansible5.hl.local server has a 1GB secondary /dev/sdb disk attached.
+There are no regular users created on any of the servers.
+Tips and Suggestions
+I tried to cover as many exam objectives as possible, however, note that there will be no questions related to dynamic inventory.
+
+Some questions may depend on the outcome of others. Please read all questions before proceeding.
+
+Note that the purpose of the sample exam is to test your skills. Please don’t post your playbooks in the comments section.
+
+Sample Exam Questions
+Note: you have root access to all five servers.
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 1: Ansible Installation and Configuration
+. Install ansible package on the control node (including any dependencies) and configure the following:
+
+. Create a regular user automation with the password of devops. Use this user for all sample exam tasks and playbooks, unless you are working on the task #2 that requires creating the automation user on inventory hosts. You have root access to all five servers.
+. All playbooks and other Ansible configuration that you create for this sample exam should be stored in /home/automation/plays.
+. Create a configuration file /home/automation/plays/ansible.cfg to meet the following requirements:
+	. The roles path should include /home/automation/plays/roles, as well as any other path that may be required for the course of the sample exam.
+	. The inventory file path is /home/automation/plays/inventory.
+	. Privilege escallation is disabled by default.
+	. Ansible should be able to manage 10 hosts at a single time.
+	. Ansible should connect to all managed nodes using the automation user.
+	. Create an inventory file /home/automation/plays/inventory with the following:
+
+ansible2.hl.local is a member of the proxy host group.
+ansible3.hl.local is a member of the webservers host group.
+ansible4.hl.local is a member of the webservers host group.
+ansible5.hl.local is a member of the database host group.
+
+
+$ cat ansible.cfg 
+[defaults]
+inventory = ./inventory
+remote_user = automation
+forks = 10
+#log_path = ansible.log
+roles_path = /home/automation/plays/roles:~/.ansible/roles:/usr/share/ansible/roles:/etc/ansible/roles
+
+[privilege_escalation]
+become = False
+become_user = root
+become_method = sudo
+become_ask_pass = False
+
+$ cat inventory 
+[proxy]
+ansible1.hl.local
+
+[webservers]
+ansible2.hl.local
+ansible3.hl.local
+
+[database]
+ansible4.hl.local
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 2: Ad-Hoc Commands
+. Generate an SSH keypair on the control node. You can perform this step manually.
+
+. Write a script /home/automation/plays/adhoc that uses Ansible ad-hoc commands to achieve the following:
+	. User automation is created on all inventory hosts (not the control node).
+	. SSH key (that you generated) is copied to all inventory hosts for the automation user and stored in /home/automation/.ssh/authorized_keys.
+	. The automation user is allowed to elevate privileges on all inventory hosts without having to provide a password.
+	. After running the adhoc script, you should be able to SSH into all inventory hosts using the automation user without password, as well as a run all privileged commands.
+
+
+1. 
+. Create normal user 'automation' on control node; 
+# useradd automation
+. Switch to user automation
+# su - automation
+. Create folder 'plays' and switch to it; all playbooks and configuration files will be stored here
+# mkdir plays
+# cd plays
+# pwd
+/home/automation/plays
+
+2. 
+.Manually generate SSH keys for user 'automation'
+# ssh-keygen
+
+3. (host_key_checking = False) ??
+. Run an ad-hoc ping command so the managed hosts public keys get copied in the known_hosts file on the control node; accept keys: yes,yes,yes,yes
+# ansible all -m ping [-u root]
+
+4.
+. Create and run following bash script from control node
+# cat adhoc
+
+#!/bin/bash
+echo Create User ...
+ansible all -m user -a "name=automation state=present" -u root --ask-pass
+
+echo Copy SSH key ...
+ansible all -m authorized_key -a "user=automation state=present key=\"{{ lookup(\'file\', \'/home/automation/.ssh/id_rsa.pub\') }}\"" -u root --ask-pass
+
+echo Configure sudo ...
+ansible all -m copy -a "content='automation ALL=(ALL:ALL) NOPASSWD: ALL' dest=/etc/sudoers.d/sudousers mode=0440" -u root --ask-pass
+
+
+
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 3: File Content
+. Create a playbook /home/automation/plays/motd.yml that runs on all inventory hosts and does the following:
+
+	. The playbook should replace any existing content of /etc/motd with text. Text depends on the host group.
+	. On hosts in the proxy host group the line should be “Welcome to HAProxy server”.
+	. On hosts in the webservers host group the line should be “Welcome to Apache server”.
+	. On hosts in the database host group the line should be “Welcome to MySQL server”.
+
+---
+- name: MOTD
+  hosts: all
+  become: yes
+  gather_facts: no
+
+  tasks:
+
+    - name: Template MOTD
+      template:
+        src: templates/motd_main.j2
+        dest: /etc/motd
+        owner: root
+        group: root
+        mode: 0644
+
+
+$ cat templates/motd_main.j2 
+
+{% if 'proxy' in group_names %}
+Welcome to HAProxy server
+{% endif %}
+{% if 'webservers' in group_names %}
+Welcome to Apache server
+{% endif %}
+{% if 'database' in group_names %}
+Welcome to MySQL server
+{% endif %}
+
+
+$ cat templates/motd_alt.j2 
+
+{% if inventory_hostname in groups['proxy'] %}
+Welcome to HAProxy server!
+{% endif %}
+{% if inventory_hostname in groups['webservers'] %}
+Welcome to Apache server!
+{% endif %}
+{% if inventory_hostname in groups['database'] %}
+Welcome to MySQL server-again!
+{% endif %}
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 4: Configure SSH Server
+. Create a playbook /home/automation/plays/sshd.yml that runs on all inventory hosts and configures SSHD daemon as follows:
+
+	. banner is set to /etc/motd
+	. X11Forwarding is disabled
+	. MaxAuthTries is set to 3
+
+---
+- name: Configure SSH Server
+  hosts: all
+  become: yes
+  gather_facts: no
+  vars:
+    path: /etc/ssh/sshd_config
+  tasks:
+
+    - name: Modify sshd_config
+      block:
+
+        - name: Configure banner
+          lineinfile:
+            path: "{{ path }}"
+            regexp: '^#Banner'
+            line: 'Banner /etc/motd'
+
+        - name: Configure X11Forwarding
+          lineinfile:
+            path: "{{ path }}"
+            regexp: '^X11Forwarding yes'
+            line: 'X11Forwarding no'
+
+        - name: Configure MaxAuthTries
+          lineinfile:
+            path: "{{ path }}"
+            regexp: '^#MaxAuthTries'
+            line: 'MaxAuthTries 3'
+
+      always:
+
+        - name: Restart sshd
+          service:
+            name: sshd
+            state: restarted
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 5: Ansible Vault
+. Create Ansible vault file /home/automation/plays/secret.yml. Encryption/decryption password is devops.
+
+Add the following variables to the vault:
+
+	. user_password with value of devops
+	. database_password with value of devops
+	. Store Ansible vault password in the file /home/automation/plays/vault_key.
+
+
+$ ansible-vault create secret.yml
+Vault password: [devops]
+---
+user_password: devops
+database_password: devops
+
+$ vim vault_key
+devops
+
+$ chmod 0600 vault_key
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 6: Users and Groups
+You have been provided with the list of users below.
+
+. Use /home/automation/plays/vars/user_list.yml file to save this content.
+
+---
+users:
+  - username: alice
+    uid: 1201
+  - username: vincent
+    uid: 1202
+  - username: sandy
+    uid: 2201
+  - username: patrick
+    uid: 2202
+
+. Create a playbook /home/automation/plays/users.yml that uses the vault file /home/automation/plays/secret.yml to achieve the following:
+
+	. Users whose user ID starts with 1 should be created on servers in the webservers host group. User password should be used from the user_password variable.
+	. Users whose user ID starts with 2 should be created on servers in the database host group. User password should be used from the user_password variable.
+	. All users should be members of a supplementary group wheel.
+	. Shell should be set to /bin/bash for all users.
+	. Account passwords should use the SHA512 hash format.
+	. Each user should have an SSH key uploaded (use the SSH key that you created previously, see task #2).
+	. After running the playbook, users should be able to SSH into their respective servers without passwords.
+
+
+---
+- name: Users and Groups
+  hosts: all
+  become: yes
+  gather_facts: no
+  vars_files:
+    - vars/user_list.yml
+    - secret.yml
+  tasks:
+
+    - name: Create users with UID starting with '1'
+      user:
+        name: "{{ item.username }}"
+        uid: "{{ item.uid }}"
+        shell: /bin/bash
+        groups: wheel
+        password: "{{ user_password | password_hash('sha512') }}"
+        update_password: on_create
+        state: present
+      when:
+        - (item['uid'] | string).startswith('1')
+        - inventory_hostname in groups['webservers']
+      loop: "{{ users }}"
+
+    - name: Create users with UID starting with '2'
+      user:
+        name: "{{ item.username }}"
+        uid: "{{ item.uid }}"
+        shell: /bin/bash
+        groups: wheel
+        password: "{{ user_password | password_hash('sha512') }}"
+        update_password: on_create
+        state: present
+      when:
+        - (item['uid'] | string).startswith('2')
+        - inventory_hostname in groups['database']
+      loop: "{{ users }}"
+
+    - name: Copy SSH keys
+      authorized_key:
+        user: "{{ item.username }}"
+        state: present
+        key: "{{ lookup('file', '/home/automation/.ssh/id_rsa.pub') }}"
+      when:
+        - (item['uid'] | string).startswith('1')
+        - (item['uid'] | string).startswith('2')
+        - inventory_hostname in groups['webservers']
+        - inventory_hostname in groups['database']
+      loop: "{{ users }}"
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 7: Scheduled Tasks
+. Create a playbook /home/automation/plays/regular_tasks.yml that runs on servers in the proxy host group and does the following:
+
+	. A root crontab record is created that runs every hour.
+	. The cron job appends the file /var/log/time.log with the output from the date command.
+
+---
+- name: Task 7 - crontab
+  hosts: proxy
+  become: yes
+  gather_facts: no
+  tasks:
+
+    - name: Setup cron for root
+      cron:
+        name: Append date to /var/log/time.log
+        user: root
+        minute: "0"
+        job: "date >> /var/log/time.log"
+        cron_file: ansible_date
+        state: present
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 8: Software Repositories
+. Create a playbook /home/automation/plays/repository.yml that runs on servers in the database host group and does the following:
+
+	. A YUM repository file is created.
+	. The name of the repository is mysql56-community.
+	. The description of the repository is “MySQL 5.6 YUM Repo”.
+	. Repository baseurl is http://repo.mysql.com/yum/mysql-5.6-community/el/7/x86_64/.
+	. Repository GPG key is at http://repo.mysql.com/RPM-GPG-KEY-mysql.
+	. Repository GPG check is enabled.
+	. Repository is enabled.
+
+---
+- name: Task 8 - Software Repositories
+  hosts: localhost
+  become: yes
+  gather_facts: no
+  tasks:
+
+    - name: Configure repository
+      yum_repository:
+        name: mysql56-community
+        description: MySQL 5.6 YUM Repo
+        baseurl: http://repo.mysql.com/yum/mysql-5.6-community/el/7/x86_64/
+        gpgcheck: yes
+        enabled: yes
+        file: mysql-community
+
+    - name: Import GPG key
+      rpm_key:
+        state: present
+        key: http://repo.mysql.com/RPM-GPG-KEY-mysql
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 9: Create and Work with Roles
+. Create a role called sample-mysql and store it in /home/automation/plays/roles. The role should satisfy the following requirements:
+
+	. A primary partition number 1 of size 800MB on device /dev/sdb is created.
+	. An LVM volume group called vg_database is created that uses the primary partition created above.
+	. An LVM logical volume called lv_mysql is created of size 512MB in the volume group vg_database.
+	. An XFS filesystem on the logical volume lv_mysql is created.
+	. Logical volume lv_mysql is permanently mounted on /mnt/mysql_backups.
+	. mysql-community-server package is installed.
+	. Firewall is configured to allow all incoming traffic on MySQL port TCP 3306.
+	. MySQL root user password should be set from the variable database_password (see task #5).
+	. MySQL server should be started and enabled on boot.
+	. MySQL server configuration file is generated from the my.cnf.j2 Jinja2 template with the following content:
+
+		[mysqld]
+		bind_address = {{ ansible_default_ipv4.address }}
+		skip_name_resolve
+		datadir=/var/lib/mysql
+		socket=/var/lib/mysql/mysql.sock
+
+		symbolic-links=0
+		sql_mode=NO_ENGINE_SUBSTITUTION,STRICT_TRANS_TABLES 
+
+		[mysqld_safe]
+		log-error=/var/log/mysqld.log
+		pid-file=/var/run/mysqld/mysqld.pid
+
+. Create a playbook /home/automation/plays/mysql.yml that uses the role and runs on hosts in the database host group.
+
+[automation@ansible-control plays]$ tree
+.
+├── adhoc.sh
+├── ansible.cfg
+├── inventory
+├── motd.yml
+├── mysql.yml
+├── regular_tasks.yml
+├── repository.yml
+├── roles
+│   └── sample-mysql
+│       ├── defaults
+│       │   └── main.yml
+│       ├── files
+│       ├── handlers
+│       │   └── main.yml
+│       ├── meta
+│       │   └── main.yml
+│       ├── README.md
+│       ├── tasks
+│       │   ├── main.yml
+│       │   ├── mysql.yml
+│       │   └── storage.yml
+│       ├── templates
+│       │   └── my.cnf.j2
+│       ├── tests
+│       │   ├── inventory
+│       │   └── test.yml
+│       └── vars
+│           └── main.yml
+├── secret.yml
+├── setuprepoclient.sh
+├── setupreposerver.yml
+├── sshd.yml
+├── templates
+│   ├── motd_alt.j2
+│   └── motd_main.j2
+├── users.yml
+├── vars
+│   └── user_list.yml
+└── vault_key
+
+$ ansible-playbook mysql.yml --vault-password-file vault_key
+
+$ cat mysql.yml 
+---
+- name: Task 9 - Roles
+  hosts: database
+  become: yes
+  vars_files:
+    - secret.yml
+
+  tasks:
+
+    - name: Include sample-mysql role
+      include_role:
+        name: sample-mysql
+
+
+
+
+$ cat tasks/main.yml 
+---
+# tasks file for sample-mysql
+
+- name: Include storage tasks
+  include_tasks: tasks/storage.yml
+
+- name: Include mysql tasks
+  include_tasks: tasks/mysql.yml
+
+
+$ cat tasks/storage.yml 
+---
+- name: Create partition
+  parted:
+    device: /dev/sdb
+    number: 1
+    state: present
+    part_start: 0%
+    part_end: 800MiB
+    flags: [ lvm ]
+
+- name: Create VG
+  lvg:
+    vg: vg_database
+    pvs: /dev/sdb1
+
+- name: Create LV
+  lvol:
+    lv: lv_mysql
+    vg: vg_database
+    size: 512M
+
+- name: Create Filesystem
+  filesystem:
+    fstype: xfs
+    dev: /dev/vg_database/lv_mysql
+
+- name: Create mountpoint
+  file:
+    path: /mnt/mysql_backups
+    state: directory
+
+- name: Mount Filesystem
+  mount:
+    path: /mnt/mysql_backups
+    src: /dev/vg_database/lv_mysql
+    fstype: xfs
+    state: mounted
+
+$ cat tasks/mysql.yml 
+---
+- name: Install mysql-community-package
+  yum:
+    name: mysql-server
+    state: latest
+
+- name: Configure firewall
+  firewalld:
+    port: 3306/tcp
+    state: enabled
+    immediate: yes
+    permanent: yes
+
+- name: Install python3-PyMySQL
+  yum:
+    name: python3-PyMySQL
+    state: latest
+
+- name: Start and enable mysql server
+  service:
+    name: mysqld
+    state: started
+    enabled: yes
+
+- name: configure mysql root user password
+  mysql_user:
+    name: root
+    #login_password: "{{ database_password }}"
+    password: "{{ database_password }}"
+
+- name: Template my.cnf
+  template:
+    src: templates/my.cnf.j2
+    dest: /etc/my.cnf
+    owner: mysql
+    group: mysql
+    force: yes
+  notify: restart_mysql
+
+$ cat handlers/main.yml 
+---
+# handlers file for sample-mysql
+- name: restart_mysql
+  service:
+    name: mysqld
+    state: restarted
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 10: Create and Work with Roles (Some More)
+. Create a role called sample-apache and store it in /home/automation/plays/roles. The role should satisfy the following requirements:
+
+	. The httpd, mod_ssl and php packages are installed. Apache service is running and enabled on boot.
+	. Firewall is configured to allow all incoming traffic on HTTP port TCP 80 and HTTPS port TCP 443.
+	. Apache service should be restarted every time the file /var/www/html/index.html is modified.
+	. A Jinja2 template file index.html.j2 is used to create the file /var/www/html/index.html with the following content:
+		. The address of the server is: IPV4ADDRESS
+		. IPV4ADDRESS is the IP address of the managed node.
+
+. Create a playbook /home/automation/plays/apache.yml that uses the role and runs on hosts in the webservers host group.
+
+---
+- name: Task 10 - sample-apache role
+  hosts: webservers
+  become: yes
+  roles:
+    - role: sample-apache
+
+
+---
+# tasks file for sample-apache
+#
+- name: Install httpd, mod_ssl, php
+  yum:
+    name:
+      - httpd
+      - mod_ssl
+      - php
+    state: latest
+
+- name: Start and enable Apache
+  service:
+    name: httpd
+    state: started
+    enabled: yes
+
+- name: Open firewall http tcp 80
+  firewalld:
+    service: http
+    state: enabled
+    permanent: yes
+    immediate: yes
+
+- name: Open firewall https tcp 443
+  firewalld:
+    service: https
+    state: enabled
+    permanent: yes
+    immediate: yes
+
+- name: Template index.html
+  template:
+    src: templates/index.html.j2
+    dest: /var/www/html/index.html
+  notify: restart_http
+
+---
+# handlers file for sample-apache
+
+- name: restart_http
+  service:
+    name: httpd
+    state: restarted
+
+$ cat templates/index.html.j2 
+The address of the server is: {{ ansible_default_ipv4['address'] }}
+The address of the server is: {{ ansible_facts['default_ipv4']['address'] }}
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 11: Download Roles From Ansible Galaxy and Use Them
+
+. Use Ansible Galaxy to download and install geerlingguy.haproxy role in /home/automation/plays/roles.
+
+. Create a playbook /home/automation/plays/haproxy.yml that runs on servers in the proxy host group and does the following:
+
+	. Use geerlingguy.haproxy role to load balance request between hosts in the webservers host group.
+	. Use roundrobin load balancing method.
+	. HAProxy backend servers should be configured for HTTP only (port 80).
+	. Firewall is configured to allow all incoming traffic on port TCP 80.
+
+If your playbook works, then doing “curl http://ansible2.hl.local/” should return output from the web server (see task #10). Running the command again should return output from the other web server.
+
+
+
+$ ansible-galaxy install -r roles/requirements.yml -p roles/
+
+$ cat roles/requirements.yml 
+---
+- src: geerlingguy.haproxy
+  #version:
+  #name:
+
+
+---
+- name: Task 11 - Ansible Galaxy HAProxy
+  hosts: proxy
+  become: yes
+  roles:
+    - role: geerlingguy.haproxy
+      vars:
+        haproxy_backend_balance_method: 'roundrobin'
+        haproxy_backend_servers:
+          - name: ansible2.hl.local
+            address: 172.23.10.12:80
+          - name: ansible3.hl.local
+            address: 172.23.10.13:80
+
+  tasks:
+
+    - name: Configure firewall
+      firewalld:
+        port: 80/tcp
+        state: enabled
+        immediate: yes
+        permanent: yes
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 12: Security
+. Create a playbook /home/automation/plays/selinux.yml that runs on hosts in the webservers host group and does the following:
+
+	. Uses the selinux RHEL system role.
+	. Enables httpd_can_network_connect SELinux boolean.
+	. The change must survive system reboot.
+
+---
+- name: Task12 - SELinux System Role
+  hosts: webservers
+  become: True
+  roles:
+    - role: rhel-system-roles.selinux
+      vars:
+        selinux_policy: targeted
+        selinux_state: enforcing
+        selinux_booleans:
+          - name: 'httpd_can_network_connect'
+            state: on
+            persistent: yes
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 13: Use Conditionals to Control Play Execution
+Create a playbook /home/automation/plays/sysctl.yml that runs on all inventory hosts and does the following:
+
+If a server has more than 2048MB of RAM, then parameter vm.swappiness is set to 10.
+If a server has less than 2048MB of RAM, then the following error message is displayed:
+Server memory less than 2048MB
+
+---
+- name: Task 13 - Use Conditionals to control Play Execution
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  tasks:
+
+    - name: Set vm.swappiness PERSISTENT
+      lineinfile:
+        path: /etc/sysctl.conf
+        line: vm.swappiness = 10
+      when: ansible_facts['memory_mb']['real']['total'] > 1800
+      notify: sysctl_p
+
+    - name: Display error message with debug module
+      debug:
+        msg: "Server memory less than 2048MB"
+      when: ansible_facts['memory_mb']['real']['total'] < 1800
+
+  handlers:
+
+    - name: sysctl_p
+      command: sysctl -p
+...
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 14: Use Archiving
+. Create a playbook /home/automation/plays/archive.yml that runs on hosts in the database host group and does the following:
+
+	. A file /mnt/mysql_backups/database_list.txt is created that contains the following line: dev,test,qa,prod.
+	. A gzip archive of the file /mnt/mysql_backups/database_list.txt is created and stored in /mnt/mysql_backups/archive.gz.
+
+
+---
+- name: Task 14 - Use Archiving
+  hosts: database
+  become: yes
+  gather_facts: no
+  tasks:
+    - name: Create file /mnt/mysql_backups/database_list.txt
+      copy:
+        content: "dev,test,qa,prod\n"
+        dest: /mnt/mysql_backups/database_list.txt
+
+    - name: Create archive of the file
+      archive:
+        path: /mnt/mysql_backups/database_list.txt
+        dest: /mnt/mysql_backups/archive.gz
+        format: gz
+...
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 15: Work with Ansible Facts
+. Create a playbook /home/automation/plays/facts.yml that runs on hosts in the database host group and does the following:
+
+	. A custom Ansible fact server_role=mysql is created that can be retrieved from ansible_local.custom.sample_exam when using Ansible setup module.
+
+---
+- name: Task 15 - Work with Ansible Facts
+  hosts: database
+  become: True
+  gather_facts: False
+  tasks:
+
+    - name: Create custom fact
+      blockinfile:
+        path: /etc/ansible/facts.d/custom.fact
+        block: |
+          [sample_exam]
+          server_role=mysql
+        create: True
+
+    - name: Run setup module
+      setup:
+
+    - name: Print custom fact
+      debug:
+        msg: Server role is {{ ansible_local['custom']['sample_exam']['server_role'] }}
+
+    - name: TEST
+      debug:
+        var: ansible_facts['ansible_local']['custom']['sample_exam']['server_role']
+...
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 16: Software Packages
+. Create a playbook /home/automation/plays/packages.yml that runs on all inventory hosts and does the following:
+
+	. Installs tcpdump and mailx packages on hosts in the proxy host groups.
+	. Installs lsof and mailx and packages on hosts in the database host groups.
+
+---
+- name: Task 16 - Software Packages
+  hosts: all
+  become: True
+  gather_facts: no
+
+  tasks:
+
+    - name: Install tcpdump and mailx on 'proxy' group
+      yum:
+        name:
+          - tcpdump
+          - mailx
+        state: latest
+      when: inventory_hostname in groups['proxy']
+
+    - name: Install lsof and mailx on 'database' group
+      yum:
+        name:
+          - lsof
+          - mailx
+        state: latest
+      when: "'database' in group_names"
+...
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 17: Services
+. Create a playbook /home/automation/plays/target.yml that runs on hosts in the webservers host group and does the following:
+
+	. Sets the default boot target to multi-user.
+
+---
+- name: Task 17 - Change default boot target to multi-user
+  hosts: webservers
+  become: yes
+  gather_facts: no
+  tasks:
+
+    - name:  Change default boot target to multi-user
+      file:
+        src: /usr/lib/systemd/system/multi-user.target
+        path: /etc/systemd/system/default.target
+        state: link
+...
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Task 18. Create and Use Templates to Create Customised Configuration Files
+. Create a playbook /home/automation/plays/server_list.yml that does the following:
+
+	. Playbook uses a Jinja2 template server_list.j2 to create a file /etc/server_list.txt on hosts in the database host group.
+	. The file /etc/server_list.txt is owned by the automation user.
+	. File permissions are set to 0600.
+	. SELinux file label should be set to net_conf_t.
+	. The content of the file is a list of FQDNs of all inventory hosts.
+	. After running the playbook, the content of the file /etc/server_list.txt should be the following:
+
+ansible2.hl.local
+ansible3.hl.local
+ansible4.hl.local
+ansible5.hl.local
+Note: if the FQDN of any inventory host changes, re-running the playbook should update the file with the new values.
+
+---
+- name: Task 18 - Create and Use Templates
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Template file
+      template:
+        src: templates/server_list.j2
+        dest: /etc/server_list.txt
+        owner: automation
+        mode: '0600'
+        setype: net_conf_t
+      when: inventory_hostname in groups['database']
+...  
+
+$ cat templates/server_list.j2 
+{% for host in groups['all'] %}
+{{ hostvars[host]['ansible_facts']['fqdn'] }}
+{% endfor %}
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
