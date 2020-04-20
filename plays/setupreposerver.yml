@@ -1,0 +1,42 @@
+---
+- name: Setup local REPO
+  hosts: localhost
+  become: True
+  tasks:
+
+    - name: Install vsftpd
+      yum:
+        name: vsftpd
+        state: latest
+
+    - name: create directory /var/ftp/repo
+      file:
+        path: /var/ftp/repo
+        state: directory
+        mode: 0755
+
+    - name: mount /root/rhel.iso as /var/ftp/repo
+      mount:
+        path: /var/ftp/repo
+        src: /dev/sr0
+        fstype: iso9660
+        opts: 'context="system_u:object_r:public_content_t:s0"'
+        state: mounted
+
+    - name: allow anonymous access to vsftpd
+      lineinfile:
+        path: /etc/vsftpd/vsftpd.conf
+        regexp: '^anonymous_enable=NO'
+        line: 'anonymous_enable=YES'
+
+    - name: disable firewalld
+      service:
+        name: firewalld
+        state: stopped
+        enabled: no
+
+    - name: start and enable vsftpd
+      service:
+        name: vsftpd
+        state: restarted
+        enabled: yes

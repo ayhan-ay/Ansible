@@ -1,0 +1,30 @@
+---
+- name: Use rhel-system-roles.network
+  hosts: ansible1.hl.local
+  become: yes
+  become_user: root
+  become_method: sudo
+
+  vars:
+    network_connections:
+      - name: ansiblenw
+        state: up
+        autoconnect: yes
+        type: ethernet
+        interface_name: enp0s8
+        ip:
+          dhcp4: no
+          gateway4: 172.23.20.254
+          dns:
+            - 8.8.8.8
+            - 4.4.4.4
+          dns_search:
+            - hl.local
+            - smaranda.lab
+          address:
+            - 172.23.20.11/24
+
+
+  roles:
+
+    - role: rhel-system-roles.network

@@ -1,0 +1,22 @@
+---
+- name: Task 11 - Ansible Galaxy HAProxy
+  hosts: proxy
+  become: yes
+  roles:
+    - role: geerlingguy.haproxy
+      vars:
+        haproxy_backend_balance_method: 'roundrobin'
+        haproxy_backend_servers:
+          - name: ansible2.hl.local
+            address: 172.23.10.12:80
+          - name: ansible3.hl.local
+            address: 172.23.10.13:80
+
+  tasks:
+
+    - name: Configure firewall
+      firewalld:
+        port: 80/tcp
+        state: enabled
+        immediate: yes
+        permanent: yes

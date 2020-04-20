@@ -1,0 +1,36 @@
+---
+# tasks file for sample-apache
+#
+- name: Install httpd, mod_ssl, php
+  yum:
+    name:
+      - httpd
+      - mod_ssl
+      - php
+    state: latest
+
+- name: Start and enable Apache
+  service:
+    name: httpd
+    state: started
+    enabled: yes
+
+- name: Open firewall http tcp 80
+  firewalld:
+    service: http
+    state: enabled
+    permanent: yes
+    immediate: yes
+
+- name: Open firewall https tcp 443
+  firewalld:
+    service: https
+    state: enabled
+    permanent: yes
+    immediate: yes
+
+- name: Template index.html
+  template:
+    src: templates/index.html.j2
+    dest: /var/www/html/index.html
+  notify: restart_http

@@ -1,0 +1,9 @@
+{% if inventory_hostname in groups['proxy'] %}
+Welcome to HAProxy server!
+{% endif %}
+{% if inventory_hostname in groups['webservers'] %}
+Welcome to Apache server!
+{% endif %}
+{% if inventory_hostname in groups['database'] %}
+Welcome to MySQL server!
+{% endif %}

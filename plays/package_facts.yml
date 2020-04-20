@@ -1,0 +1,17 @@
+---
+- name: Test package_facts module
+  hosts: proxy,database
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Gather package_facts
+      package_facts:
+        manager: auto
+
+    - name: Print host-package info
+      debug:
+        msg: "lsof and mailx are installed"
+      when: >
+        'lsof' in ansible_facts.packages and
+        'mailx' in ansible_facts.packages

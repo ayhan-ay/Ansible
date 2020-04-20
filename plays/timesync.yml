@@ -1,0 +1,24 @@
+---
+- name: Use timesync system role
+  hosts: all
+  become: yes
+  vars:
+    timesync_ntp_servers:
+      - hostname: 0.pool.ntp.org
+        iburst: yes
+      - hostname: 1.pool.ntp.org
+        iburst: yes
+      - hostname: 2.pool.ntp.org
+        iburst: yes
+      - hostname: 3.pool.ntp.org
+        iburst: yes
+    timezone: Europe/Bucharest
+
+
+  roles:
+    - role: rhel-system-roles.timesync
+
+  tasks:
+    - name: Set Timezone
+      timezone:
+        name: "{{ timezone }}"

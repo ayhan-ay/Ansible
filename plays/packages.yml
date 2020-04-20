@@ -1,0 +1,24 @@
+---
+- name: Task 16 - Software Packages
+  hosts: all
+  become: True
+  gather_facts: no
+
+  tasks:
+
+    - name: Install tcpdump and mailx on 'proxy' group
+      yum:
+        name:
+          - tcpdump
+          - mailx
+        state: latest
+      when: inventory_hostname in groups['proxy']
+
+    - name: Install lsof and mailx on 'database' group
+      yum:
+        name:
+          - lsof
+          - mailx
+        state: latest
+      when: "'database' in group_names"
+...

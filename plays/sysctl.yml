@@ -1,0 +1,38 @@
+---
+- name: Task 13 - Use Conditionals to control Play Execution
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  tasks:
+
+    #- name: Check free memory
+    #  debug:
+    #    var: "{{ ansible_facts['memory_mb']['real']['total'] }}"
+
+    #- name: Set vm.swappiness RUNTIME
+    #  command: sudo bash -c 'echo 10 >> /proc/sys/vm/swappiness'
+    #  when: ansible_facts['memory_mb']['real']['total'] > 1800
+
+    - name: Set vm.swappiness PERSISTENT
+      lineinfile:
+        path: /etc/sysctl.conf
+        line: vm.swappiness = 10
+      when: ansible_facts['memory_mb']['real']['total'] > 1800
+      notify: sysctl_p
+
+    - name: Display error message with debug module
+      debug:
+        msg: "Server memory less than 2048MB"
+      when: ansible_facts['memory_mb']['real']['total'] < 1800
+
+    #- name: Display error message with fail module
+    #  fail:
+    #    msg: "Server memory less than 2048MB!!!"
+    #  when: ansible_memory_mb.real.total < 1800
+
+  handlers:
+    
+    - name: sysctl_p
+      command: sysctl -p
+...

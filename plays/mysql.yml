@@ -1,0 +1,12 @@
+---
+- name: Task 9 - Roles
+  hosts: database
+  become: yes
+  vars_files:
+    - secret.yml
+
+  tasks:
+
+    - name: Include sample-mysql role
+      include_role: 
+        name: sample-mysql

@@ -1,0 +1,15 @@
+---
+- name: Task 7 - crontab
+  hosts: proxy
+  become: yes
+  gather_facts: no
+  tasks:
+
+    - name: Setup cron for root
+      cron:
+        name: Append date to /var/log/time.log
+        user: root
+        minute: "0"
+        job: "date >> /var/log/time.log"
+        cron_file: ansible_date
+        state: present

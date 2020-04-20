@@ -1,0 +1,38 @@
+---
+- name: Install mysql-community-package
+  yum:
+    name: mysql-server
+    state: latest
+
+- name: Configure firewall
+  firewalld:
+    port: 3306/tcp
+    state: enabled
+    immediate: yes
+    permanent: yes
+
+- name: Install python3-PyMySQL
+  yum:
+    name: python3-PyMySQL
+    state: latest
+
+- name: Start and enable mysql server
+  service:
+    name: mysqld
+    state: started
+    enabled: yes
+
+- name: configure mysql root user password
+  mysql_user:
+    name: root
+    login_password: "{{ database_password }}"
+    password: "{{ database_password }}"
+
+- name: Template my.cnf
+  template:
+    src: templates/my.cnf.j2
+    dest: /etc/my.cnf
+    owner: mysql
+    group: mysql
+    force: yes
+  notify: restart_mysql

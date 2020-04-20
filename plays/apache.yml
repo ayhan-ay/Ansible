@@ -1,0 +1,6 @@
+---
+- name: Task 10 - sample-apache role
+  hosts: webservers
+  become: yes
+  roles:
+    - role: sample-apache

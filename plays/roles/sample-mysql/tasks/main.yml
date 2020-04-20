@@ -1,0 +1,8 @@
+---
+# tasks file for sample-mysql
+
+- name: Include storage tasks
+  include_tasks: tasks/storage.yml
+
+- name: Include mysql tasks
+  include_tasks: tasks/mysql.yml

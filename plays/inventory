@@ -1,0 +1,9 @@
+[proxy]
+ansible1.hl.local
+
+[webservers]
+ansible2.hl.local
+ansible3.hl.local
+
+[database]
+ansible4.hl.local

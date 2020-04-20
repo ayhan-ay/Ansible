@@ -1,0 +1,49 @@
+---
+- name: Users and Groups
+  hosts: all
+  become: yes
+  gather_facts: no
+  vars_files:
+    - vars/user_list.yml
+    - secret.yml
+  tasks:
+
+    - name: Create users with UID starting with '1'
+      user:
+        name: "{{ item.username }}"
+        uid: "{{ item.uid }}"
+        shell: /bin/bash
+        groups: wheel
+        password: "{{ user_password | password_hash('sha512') }}"
+        update_password: on_create
+        state: present
+      when: 
+        - (item['uid'] | string).startswith('1')
+        - inventory_hostname in groups['webservers']
+      loop: "{{ users }}"
+
+    - name: Create users with UID starting with '2'
+      user:
+        name: "{{ item.username }}"
+        uid: "{{ item.uid }}"
+        shell: /bin/bash
+        groups: wheel
+        password: "{{ user_password | password_hash('sha512') }}"
+        update_password: on_create
+        state: present
+      when: 
+        - (item['uid'] | string).startswith('2')
+        - inventory_hostname in groups['database']
+      loop: "{{ users }}"
+
+    - name: Copy SSH keys
+      authorized_key:
+        user: "{{ item.username }}"
+        state: present
+        key: "{{ lookup('file', '/home/automation/.ssh/id_rsa.pub') }}"
+      when: 
+        - (item['uid'] | string).startswith('1')
+        - (item['uid'] | string).startswith('2')
+        - inventory_hostname in groups['webservers']
+        - inventory_hostname in groups['database']
+      loop: "{{ users }}"

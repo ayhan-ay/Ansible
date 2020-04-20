@@ -1,0 +1,27 @@
+---
+- name: Task 14 - Use Archiving
+  hosts: database
+  become: yes
+  gather_facts: no
+  tasks:
+    - name: Create file /mnt/mysql_backups/database_list.txt
+      copy:
+        content: "dev,test,qa,prod\n"
+        dest: /mnt/mysql_backups/database_list.txt
+
+    #- name: Test blockinfile
+    #  blockinfile:
+    #    path: /mnt/mysql_backups/database_list.txt
+    #    block: |
+    #      dev
+    #      test
+    #      qa
+    #      prod
+    #    create: True
+
+    - name: Create archive of the file
+      archive:
+        path: /mnt/mysql_backups/database_list.txt
+        dest: /mnt/mysql_backups/archive.gz
+        format: gz
+...
